@@ -350,6 +350,12 @@ export async function registerRoutes(
       const updated = await storage.updateSubject(id, input);
       res.json(updated);
     } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0].message,
+          field: err.errors[0].path.join('.'),
+        });
+      }
       console.error("Subject update error:", err);
       res.status(500).json({ message: "Failed to update subject" });
     }
@@ -375,7 +381,7 @@ export async function registerRoutes(
 
   // --- Marks Routes ---
 
-  app.post(api.marks.update.path, async (req, res) => {
+  app.post(api.marks.update.path, isAuthenticated, async (req, res) => {
     try {
       const { studentId, marks: marksInput } = req.body;
       
@@ -386,18 +392,14 @@ export async function registerRoutes(
       // Update or Create marks
       const updatedMarkIds: number[] = [];
       for (const mark of marksInput) {
-        // In Profile View, we might be editing an existing mark or adding a new one
-        // If it has an ID, we use it. If not, we find/create by subject name.
         let subjectId: number | undefined;
         
         if (mark.id && !mark.id.toString().startsWith('new-')) {
-          // If it's an existing mark ID (from DB), we need to find its subject
-          // Wait, mark.id in StudentDetails state is m.id which is mark.id
           const marks = await storage.getStudents().then(students => students.flatMap(s => s.marks));
           const existingMark = marks.find(m => m.id === mark.id);
           if (existingMark) {
             subjectId = existingMark.subjectId;
-            // Update subject details if they changed
+            // Update subject details
             await storage.updateSubject(subjectId, {
               name: mark.subject,
               maxMarks: mark.max,
@@ -407,7 +409,6 @@ export async function registerRoutes(
         }
 
         if (!subjectId) {
-          // Find or create subject by name for this class
           const subjects = await storage.getSubjects();
           let subject = subjects.find(s => s.name === mark.subject && s.classId === student?.classId);
           
@@ -419,7 +420,6 @@ export async function registerRoutes(
               maxMarks: mark.max
             } as any);
           } else {
-            // Update existing subject maxMarks/date if needed
             await storage.updateSubject(subject.id, {
               maxMarks: mark.max,
               date: mark.date
@@ -432,7 +432,6 @@ export async function registerRoutes(
         updatedMarkIds.push(updatedMark.id);
       }
       
-      // Delete marks that were removed in the UI
       const marksToDelete = currentMarkIds.filter(id => !updatedMarkIds.includes(id));
       for (const id of marksToDelete) {
         await storage.deleteMark(id);

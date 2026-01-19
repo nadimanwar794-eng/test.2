@@ -267,7 +267,7 @@ export class FirebaseStorage implements IStorage {
 
     if (!snap.empty) {
       const docRef = snap.docs[0].ref;
-      await updateDoc(docRef, { obtained });
+      await updateDoc(docRef, { obtained: obtained.toString() });
       const updated = await getDoc(docRef);
       return { ...updated.data() } as Mark;
     } else {
@@ -276,7 +276,7 @@ export class FirebaseStorage implements IStorage {
         id,
         studentId,
         subjectId,
-        obtained
+        obtained: obtained.toString()
       };
       await setDoc(doc(db, "marks", id.toString()), mark);
       return mark;
